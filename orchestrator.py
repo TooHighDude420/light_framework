@@ -72,20 +72,9 @@ match do:
                 filename = f"{VIEW_DIR / name}.inc.php"
 
                 content = textwrap.dedent(f"""\
-                    <?php
-                    namespace App\\View;
-
-                    class {name}View
-                    {{
-                        public function show_{name}()
-                        {{
-                            return "
-                                <div>
-                                    <p>test</p>
-                                </div>
-                            ";
-                        }}
-                    }}""")
+                    <div>
+                        <p><!--sometimes it be always--></p>
+                    </div>""")
                 
                 with open(filename, mode="x") as handle:
                     handle.write(content)
@@ -249,23 +238,46 @@ match do:
         # build generalController
         filename = CONTROLLER_DIR / "generalController.php"
 
-        generalContent = textwrap.dedent(f"""\
+        generalContent = textwrap.dedent(r"""
             <?php
-                namespace App\\Controller;
+                namespace App\Controller;
+                use ValueError;
 
                 class GeneralController
-                {{
+                {
+                    private $routes = [];
+
                     public static function linkToAction(string $action)
-                    {{
+                    {
                         return "php/$action.php";
-                    }}
+                    }
 
                     public static function linkTo(string $location)
-                    {{
-                        return "index.php?page=$location";
-                    }}
-                }}
-        """)
+                    {
+                        return "/$location";
+                    }
+
+                    public function register_route(string $routename, string $viewname){
+                        if(isset($this->routes[$routename])){
+                            throw new ValueError("$routename already exists");
+                        } else {
+                            $this->routes[$routename] = $viewname;
+                        }
+                    }
+
+                    public function get_uri(){
+                        if (isset($this->routes[$_SERVER['REQUEST_URI']])){
+                            $selector = $this->routes[$_SERVER['REQUEST_URI']];
+                            return $selector;
+                        } else {
+                            throw new ValueError("Route not registerd or not found");
+                        }
+                    }
+
+                    public function include($url){
+                        return include "App/View/$url.inc.php";
+                    }
+                }""")
 
         with open(filename, mode='x') as handle:
             handle.write(generalContent)
