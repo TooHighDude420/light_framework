@@ -1,5 +1,5 @@
 App
 docker
-.env.example
+.env
 AutoLoad.php
 index.php
