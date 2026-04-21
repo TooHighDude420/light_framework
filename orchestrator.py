@@ -72,20 +72,9 @@ match do:
                 filename = f"{VIEW_DIR / name}.inc.php"
 
                 content = textwrap.dedent(f"""\
-                    <?php
-                    namespace App\\View;
-
-                    class {name}View
-                    {{
-                        public function show_{name}()
-                        {{
-                            return "
-                                <div>
-                                    <p>test</p>
-                                </div>
-                            ";
-                        }}
-                    }}""")
+                    <div>
+                        <p><!--sometimes it be always--></p>
+                    </div>""")
                 
                 with open(filename, mode="x") as handle:
                     handle.write(content)
@@ -122,16 +111,10 @@ match do:
                 filename = f"{COMPONENT_DIR / name}.comp.php"
 
                 content = textwrap.dedent(f"""\
-                    <?php
-                    namespace App\\View\\Component;
-
-                    class {name}Component
-                    {{
-                        public function __construct()
-                        {{
-
-                        }}
-                    }}""")
+                    <div>
+                    
+                    </div>    
+                """)
                 
                 with open(filename, mode="x") as handle:
                     handle.write(content)
@@ -247,25 +230,59 @@ match do:
             handle.write(databasecontent)
 
         # build generalController
-        filename = CONTROLLER_DIR / "generalController.php"
+        filename = STATIC_DIR / "route.php"
 
-        generalContent = textwrap.dedent(f"""\
-            <?php
-                namespace App\\Controller;
+        generalContent = textwrap.dedent(r"""<?php
+namespace App\Statics;
+use ValueError;
 
-                class GeneralController
-                {{
-                    public static function linkToAction(string $action)
-                    {{
-                        return "php/$action.php";
-                    }}
+class Route
+{
+    private static $routes = [];
 
-                    public static function linkTo(string $location)
-                    {{
-                        return "index.php?page=$location";
-                    }}
-                }}
-        """)
+    public static function linkToAction(string $action)
+    {
+        return "php/$action.php";
+    }
+
+    public static function linkTo(string $location)
+    {
+        return "/$location";
+    }
+
+    public static function register_route(string $routename, string $viewname){
+        if(isset(Route::$routes[$routename])){
+            throw new ValueError("$routename already exists");
+        } else {
+            Route::$routes[$routename] = $viewname;
+        }
+    }
+
+    public static function register_routes(array $routes){
+        foreach ($routes as $key => $val){
+            Route::register_route($key, $val);
+        }
+    }
+
+    public static function get_uri(){
+        if (isset(Route::$routes[$_SERVER['REQUEST_URI']])){
+            $selector = Route::$routes[$_SERVER['REQUEST_URI']];
+            return $selector;
+        } else {
+            throw new ValueError("Route not registerd or not found");
+        }
+    }
+
+    public static function render(string $url): mixed {
+        return include "App/View/$url.inc.php";
+    }
+
+    public static function render_component(string $name, $data){            
+        extract($data);
+
+        return include "App/View/Component/$name.comp.php";
+    }
+}""")
 
         with open(filename, mode='x') as handle:
             handle.write(generalContent)
@@ -339,13 +356,21 @@ match do:
                 require_once("AutoLoad.php");
 
                 use App\\Controller\\DatabaseController;
-                use App\\Controller\\GeneralController;
+                use App\\Statics\\Route;
 
                 session_start();
                 isset($_GET['page']) ? $page = $_GET['page'] : $page = "home";
 
                 $DatabaseController = new DatabaseController();
-                $GeneralController = new GeneralController();""")
+                                    
+                Route::register_routes([
+                    "/" => "home",
+                    "/projects" => "projects",
+                    "/about", "about"
+                ]);
+
+                $request = Route::get_uri();
+                                """)
         
         with open(filename, mode='x') as handle:
             handle.write(indexcont)
