@@ -8,3 +8,7 @@ node_modules
 package-lock.json
 style
 twinput.css
+docker-compose.yml
+Dockerfile
+Maker_Out
+venv

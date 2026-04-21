@@ -1,26 +1,42 @@
+import os
 import sys
 import textwrap
 
+from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
+from dotenv import load_dotenv
+from mysql.connector import connect
+from rich.console import Console
 
 BASE_DIR = Path(__file__).parent
+
+load_dotenv(BASE_DIR / ".env")
 
 MODEL_DIR = BASE_DIR / "App" / "Models"
 CONTROLLER_DIR = BASE_DIR / "App" / "Controller"
 COMPONENT_DIR = BASE_DIR / "App" / "View" / "Component"
 VIEW_DIR = BASE_DIR / "App" / "View"
 STATIC_DIR = BASE_DIR / "App" / "Statics"
+OUTPUT_DIR = BASE_DIR / "Maker_Out"
+SQL_DIR = OUTPUT_DIR / "SQL"
+DATABASE_LAYOUTFILE = SQL_DIR / "DataBaseLayout"
+DATABASE = os.getenv("DB_DATABASE")
+
+
+console = Console(color_system="truecolor")
 
 class actions(Enum):
     make = 0
     install = auto()
+    migration = auto()
 
 class targets(Enum):
     model = 0
     view = auto()
     controller = auto()
     component = auto()
+    table = auto()
 
 match len(sys.argv):
     case 2:
@@ -120,6 +136,34 @@ match do:
                     handle.write(content)
 
                 print(f'component {name} ready to use')
+
+            case targets.table.name:
+                databaseconn = connect(
+                    host="127.0.0.1",
+                    user=os.getenv("DB_USERNAME"),
+                    password=os.getenv("DB_PASSWORD"),
+                    database=DATABASE
+                )
+
+                databaseconn.autocommit = True
+
+                cursor = databaseconn.cursor()
+                
+                sql = textwrap.dedent(f"""\
+                    CREATE TABLE IF NOT EXISTS {DATABASE}.{name}(
+                        {name}ID INT PRIMARY KEY auto_increment NOT NULL          
+                    );
+                """)
+
+                cursor.execute(sql)
+
+                if not SQL_DIR.exists():
+                    SQL_DIR.mkdir(parents=True, exist_ok=True)
+
+                with open(SQL_DIR / f"DataBaseLayout{name}.sql", mode='w') as handle:
+                    handle.write(f"{name}ID INT PRIMARY KEY auto_increment NOT NULL")
+
+                console.log(f"made table {name}")
 
     case actions.install.name:
         if not MODEL_DIR.exists():
@@ -376,3 +420,42 @@ class Route
             handle.write(indexcont)
 
         print("install complete")
+
+    case actions.migration.name:
+        databaseconn = connect(
+            host="127.0.0.1",
+            user=os.getenv("DB_USERNAME"),
+            password=os.getenv("DB_PASSWORD"),
+            database=DATABASE
+        )
+
+        databaseconn.autocommit = True
+
+        cursor = databaseconn.cursor()
+
+        for database_file in SQL_DIR.iterdir():
+            with open(database_file, mode='r') as input:
+                tempfilecont = input.read()
+
+            name = database_file.stem.replace("DataBaseLayout", "")
+            sql = f"DESCRIBE {DATABASE}.{name};"
+
+            cursor.execute(sql)
+
+            res = cursor.fetchall()
+
+            tempfilecont = tempfilecont.strip()
+            tempfilecont = tempfilecont.split(',')
+
+            for cont in tempfilecont:
+                i = tempfilecont.index(cont)
+                tempfilecont[i] = cont.strip()
+
+            if len(res) < len(tempfilecont):
+                sql = f"ALTER TABLE {DATABASE}.{name} ADD "
+
+                for columb in tempfilecont:
+                    if not res[0][0] in columb:
+                        stmt = sql + columb
+                        console.log(stmt)
+                        cursor.execute(stmt)
