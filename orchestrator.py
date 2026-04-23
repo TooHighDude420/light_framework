@@ -28,7 +28,6 @@ BACKUP_LAYOUT_DIR = SQL_DIR / "History"
 DATABASE_LAYOUTFILE = "DataBaseLayout"
 BACKUP_LAYOUTFILE = "__DataBaseLayout"
 
-
 DATABASE = os.getenv("DB_DATABASE")
 
 console = Console(color_system="truecolor")
@@ -45,20 +44,6 @@ class targets(Enum):
     controller = auto()
     component = auto()
     table = auto()
-
-def in_table(col, tableres):
-    in_table = False
-
-    if not in_table:
-        for r in tableres:
-            if not in_table:
-                if r[0] in col:
-                    in_table = True
-                    break
-            else:
-                break
-
-    return in_table
 
 match len(sys.argv):
     case 2:
