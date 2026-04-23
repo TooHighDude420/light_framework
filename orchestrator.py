@@ -1,6 +1,9 @@
 import os
 import sys
 import textwrap
+import shutil
+
+import numpy as np
 
 from datetime import datetime
 from enum import Enum, auto
@@ -20,9 +23,13 @@ VIEW_DIR = BASE_DIR / "App" / "View"
 STATIC_DIR = BASE_DIR / "App" / "Statics"
 OUTPUT_DIR = BASE_DIR / "Maker_Out"
 SQL_DIR = OUTPUT_DIR / "SQL"
-DATABASE_LAYOUTFILE = SQL_DIR / "DataBaseLayout"
-DATABASE = os.getenv("DB_DATABASE")
+BACKUP_LAYOUT_DIR = SQL_DIR / "History"
 
+DATABASE_LAYOUTFILE = "DataBaseLayout"
+BACKUP_LAYOUTFILE = "__DataBaseLayout"
+
+
+DATABASE = os.getenv("DB_DATABASE")
 
 console = Console(color_system="truecolor")
 
@@ -30,6 +37,7 @@ class actions(Enum):
     make = 0
     install = auto()
     migration = auto()
+    drop = auto()
 
 class targets(Enum):
     model = 0
@@ -37,6 +45,20 @@ class targets(Enum):
     controller = auto()
     component = auto()
     table = auto()
+
+def in_table(col, tableres):
+    in_table = False
+
+    if not in_table:
+        for r in tableres:
+            if not in_table:
+                if r[0] in col:
+                    in_table = True
+                    break
+            else:
+                break
+
+    return in_table
 
 match len(sys.argv):
     case 2:
@@ -52,6 +74,33 @@ match len(sys.argv):
         name = sys.argv[2]
 
 match do:
+    case actions.drop.name:
+        match target:
+            case targets.table.name:
+                databaseconn = connect(
+                    host="127.0.0.1",
+                    user=os.getenv("DB_USERNAME"),
+                    password=os.getenv("DB_PASSWORD"),
+                    database=DATABASE
+                )
+
+                databaseconn.autocommit = True
+
+                cursor = databaseconn.cursor()
+
+                sql = f"DROP TABLE {DATABASE}.{name}"
+                
+                conf = input(f'are you shure this will delete {DATABASE}.{name} y/n:\n')
+
+                match conf:
+                    case 'y':
+                        cursor.execute(sql)
+                        os.remove(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql")
+                        # shutil.rmtree(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql")
+                        console.log(f"removed {DATABASE}.{name}")
+                    case 'n':
+                        sys.exit()
+
     case actions.make.name:
         match target:
             case targets.model.name:
@@ -160,8 +209,13 @@ match do:
                 if not SQL_DIR.exists():
                     SQL_DIR.mkdir(parents=True, exist_ok=True)
 
-                with open(SQL_DIR / f"DataBaseLayout{name}.sql", mode='w') as handle:
+                if not (BACKUP_LAYOUT_DIR / name).exists():
+                    (BACKUP_LAYOUT_DIR / name).mkdir(parents=True, exist_ok=True)
+
+                with open(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", mode='w') as handle:
                     handle.write(f"{name}ID INT PRIMARY KEY auto_increment NOT NULL")
+
+                shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"000{BACKUP_LAYOUTFILE}{name}.sql")
 
                 console.log(f"made table {name}")
 
@@ -434,28 +488,68 @@ class Route
         cursor = databaseconn.cursor()
 
         for database_file in SQL_DIR.iterdir():
-            with open(database_file, mode='r') as input:
-                tempfilecont = input.read()
+            if database_file.is_file():
+                name = database_file.stem.replace(DATABASE_LAYOUTFILE, "")
 
-            name = database_file.stem.replace("DataBaseLayout", "")
-            sql = f"DESCRIBE {DATABASE}.{name};"
+                with open(database_file, mode='r') as input:
+                    deltacont = input.read()
 
-            cursor.execute(sql)
+                latest = max((BACKUP_LAYOUT_DIR / name).iterdir(), key=lambda p: p.name)
 
-            res = cursor.fetchall()
+                with open(latest, mode='r') as current:
+                    latestcont = current.read()
 
-            tempfilecont = tempfilecont.strip()
-            tempfilecont = tempfilecont.split(',')
+                latestcont = latestcont.strip()
+                latestcont = latestcont.split(',') 
 
-            for cont in tempfilecont:
-                i = tempfilecont.index(cont)
-                tempfilecont[i] = cont.strip()
+                deltacont = deltacont.strip()
+                deltacont = deltacont.split(',')
 
-            if len(res) < len(tempfilecont):
-                sql = f"ALTER TABLE {DATABASE}.{name} ADD "
+                for cont in deltacont:
+                    i = deltacont.index(cont)
+                    deltacont[i] = cont.strip()
 
-                for columb in tempfilecont:
-                    if not res[0][0] in columb:
-                        stmt = sql + columb
-                        console.log(stmt)
-                        cursor.execute(stmt)
+                for lat in latestcont:
+                    i = latestcont.index(lat)
+                    latestcont[i] = lat.strip()
+
+                latestarray = np.array(latestcont)
+                deltarray = np.array(deltacont)
+
+                if not np.array_equal(latestarray, deltarray):
+                    missing_in_delta = np.setdiff1d(latestarray, deltarray)
+                    extra_in_delta   = np.setdiff1d(deltarray, latestarray)
+                    
+                    update_his = False
+
+                    if len(extra_in_delta) > 0:
+                        update_his = True
+
+                        for extra in extra_in_delta:
+                            sql = f"ALTER TABLE {DATABASE}.{name} ADD "
+                            stmt = sql + extra
+                            cursor.execute(stmt)
+
+                            field = str(extra).split(' ')[0]
+                            console.log(f"added {field} to {DATABASE}.{name}")
+                    
+                    if len(missing_in_delta) > 0:
+                        update_his = True
+
+                        for missing in missing_in_delta:
+                            sql = f"ALTER TABLE {DATABASE}.{name} DROP COLUMN "
+                            field = str(missing).split(' ')[0]
+                            stmt = sql + field
+                            cursor.execute(stmt)
+                            console.log(f"removed {field} from {DATABASE}.{name}")
+
+                    if update_his:
+                        num = latest.stem.split('__')[0]
+                        num = int(num)
+                        num += 1
+                        num = f"{num:03d}"
+
+                        shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"{num}{BACKUP_LAYOUTFILE}{name}.sql")
+
+                else:
+                    console.log(f"nothing to migrate for {name}")
