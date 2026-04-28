@@ -12,3 +12,5 @@ docker-compose.yml
 Dockerfile
 Maker_Out
 venv
+README.md
+TODO.md
