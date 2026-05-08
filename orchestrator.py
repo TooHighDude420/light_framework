@@ -252,7 +252,7 @@ match do:
 
         filename = BASE_DIR / "AutoLoad.php"
 
-        autocontent = open(TEMPLATE_DIR / "database_singleton_template.php", mode='r').read()
+        autocontent = open(TEMPLATE_DIR / "autoload_template.php", mode='r').read()
         
         with open(filename, mode='x') as handle:
             handle.write(autocontent)
@@ -261,7 +261,7 @@ match do:
 
         filename = BASE_DIR / "index.php"
 
-        indexcont = open(TEMPLATE_DIR / "database_singleton_template.php", mode='r').read()
+        indexcont = open(TEMPLATE_DIR / "template_index.php", mode='r').read()
         
         with open(filename, mode='x') as handle:
             handle.write(indexcont)
