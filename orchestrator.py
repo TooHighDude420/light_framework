@@ -19,6 +19,7 @@ load_dotenv(BASE_DIR / ".env")
 
 MODEL_DIR = BASE_DIR / "App" / "Models"
 CONTROLLER_DIR = BASE_DIR / "App" / "Controller"
+BASECLASSES_DIR = BASE_DIR / "App" / "Baseclasses"
 COMPONENT_DIR = BASE_DIR / "App" / "View" / "Component"
 VIEW_DIR = BASE_DIR / "App" / "View"
 STATIC_DIR = BASE_DIR / "App" / "Statics"
@@ -217,6 +218,10 @@ class {name} extends Models
         if not STATIC_DIR.exists():
             STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
+        if not BASECLASSES_DIR.exists():
+            BASECLASSES_DIR.mkdir(exist_ok=True, parents=True)
+
+
         # build generic databasecontroller
         filename = CONTROLLER_DIR / "databaseController.php"
 
@@ -252,7 +257,6 @@ class {name} extends Models
             handle.write(autocontent)
 
         #example index
-
         filename = BASE_DIR / "index.php"
 
         indexcont = open(TEMPLATE_DIR / "template_index.php", mode='r').read()
@@ -260,8 +264,16 @@ class {name} extends Models
         with open(filename, mode='x') as handle:
             handle.write(indexcont)
 
-        print("install complete")
+        # make model baseclass
+        filename = BASECLASSES_DIR / "Models.php"
 
+        modlescont = open(TEMPLATE_DIR / "models_template.php", mode='r').read()
+
+        with open(filename, mode='x') as handle:
+            handle.write(modlescont)
+
+        print("install complete")
+        
     case actions.migration.name:
         databaseconn = connect(
             host="127.0.0.1",
