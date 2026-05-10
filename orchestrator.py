@@ -97,21 +97,15 @@ match do:
 
                 filename = f"{MODEL_DIR / name}.php"
 
-                content = textwrap.dedent(f"""\
-                    <?php
-                    namespace App\\Models;
+                content = textwrap.dedent(rf"""<?php   
+namespace App\Models;
+use App\Baseclasses\Models;
 
-                    class {name}
-                    {{
-                        //paramaters go here
-                        public string $example;
+class {name} extends Models
+{{
 
-                        public function __construct(string $example)
-                        {{
-                            //construction goes here
-                            $this->example = $example;
-                        }}
-                    }}""")
+}}
+""")
                 
                 with open(filename, mode="x") as handle:
                     handle.write(content)

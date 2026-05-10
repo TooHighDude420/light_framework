@@ -15,6 +15,9 @@
         "/about", "about"
     ]);
 
+    $int = 0;
+    
+
     $request = Route::get_uri();
 ?>
 
