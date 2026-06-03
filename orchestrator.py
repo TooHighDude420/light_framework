@@ -2,6 +2,7 @@ import os
 import sys
 import textwrap
 import shutil
+# import argparse
 
 import numpy as np
 
@@ -14,6 +15,13 @@ from rich.console import Console
 from rich.table import Table
 
 BASE_DIR = Path(__file__).parent
+
+# IMPORTANT TODOS:
+# phase migrations
+# work out deps
+# reintergrate files for one file download framework
+# intergrate argparser
+# parser = argparse.ArgumentParser(prog="orchestrator")
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -293,65 +301,88 @@ class {name} extends Models
                 with open(database_file, mode='r') as input:
                     deltacont = input.read()
 
-                latest = max((BACKUP_LAYOUT_DIR / name).iterdir(), key=lambda p: p.name)
+                if (BACKUP_LAYOUT_DIR / name).exists():
+                    latest = max((BACKUP_LAYOUT_DIR / name).iterdir(), key=lambda p: p.name)
 
-                with open(latest, mode='r') as current:
-                    latestcont = current.read()
+                    with open(latest, mode='r') as current:
+                        latestcont = current.read()
 
-                latestcont = latestcont.strip()
-                latestcont = latestcont.split(',') 
+                    latestcont = latestcont.strip()
+                    latestcont = latestcont.split('\n') 
 
-                deltacont = deltacont.strip()
-                deltacont = deltacont.split(',')
+                    deltacont = deltacont.strip()
+                    deltacont = deltacont.split('\n')
 
-                for cont in deltacont:
-                    i = deltacont.index(cont)
-                    deltacont[i] = cont.strip()
+                    for cont in deltacont:
+                        i = deltacont.index(cont)
+                        deltacont[i] = cont.strip()
 
-                for lat in latestcont:
-                    i = latestcont.index(lat)
-                    latestcont[i] = lat.strip()
+                    for lat in latestcont:
+                        i = latestcont.index(lat)
+                        latestcont[i] = lat.strip()
 
-                latestarray = np.array(latestcont)
-                deltarray = np.array(deltacont)
+                    latestarray = np.array(latestcont)
+                    deltarray = np.array(deltacont)
 
-                if not np.array_equal(latestarray, deltarray):
-                    missing_in_delta = np.setdiff1d(latestarray, deltarray)
-                    extra_in_delta   = np.setdiff1d(deltarray, latestarray)
-                    
-                    update_his = False
+                    if not np.array_equal(latestarray, deltarray):
+                        missing_in_delta = np.setdiff1d(latestarray, deltarray)
+                        extra_in_delta   = np.setdiff1d(deltarray, latestarray)
+                        
+                        update_his = False
 
-                    if len(extra_in_delta) > 0:
-                        update_his = True
+                        if len(extra_in_delta) > 0:
+                            update_his = True
 
-                        for extra in extra_in_delta:
-                            sql = f"ALTER TABLE {DATABASE}.{name} ADD "
-                            stmt = sql + extra
-                            cursor.execute(stmt)
+                            for extra in extra_in_delta:
+                                sql = f"ALTER TABLE {DATABASE}.{name} ADD "
+                                stmt = sql + extra
+                                cursor.execute(stmt)
 
-                            field = str(extra).split(' ')[0]
-                            console.log(f"added {field} to {DATABASE}.{name}")
-                    
-                    if len(missing_in_delta) > 0:
-                        update_his = True
+                                field = str(extra).split(' ')[0]
+                                console.log(f"added {field} to {DATABASE}.{name}")
+                        
+                        if len(missing_in_delta) > 0:
+                            update_his = True
 
-                        for missing in missing_in_delta:
-                            sql = f"ALTER TABLE {DATABASE}.{name} DROP COLUMN "
-                            field = str(missing).split(' ')[0]
-                            stmt = sql + field
-                            cursor.execute(stmt)
-                            console.log(f"removed {field} from {DATABASE}.{name}")
+                            for missing in missing_in_delta:
+                                sql = f"ALTER TABLE {DATABASE}.{name} DROP COLUMN "
+                                field = str(missing).split(' ')[0]
+                                stmt = sql + field
+                                cursor.execute(stmt)
+                                console.log(f"removed {field} from {DATABASE}.{name}")
 
-                    if update_his:
-                        num = latest.stem.split('__')[0]
-                        num = int(num)
-                        num += 1
-                        num = f"{num:03d}"
+                        if update_his:
+                            num = latest.stem.split('__')[0]
+                            num = int(num)
+                            num += 1
+                            num = f"{num:03d}"
 
-                        shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"{num}{BACKUP_LAYOUTFILE}{name}.sql")
+                            shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"{num}{BACKUP_LAYOUTFILE}{name}.sql")
+
+                    else:
+                        console.log(f"nothing to migrate for {name}")
 
                 else:
-                    console.log(f"nothing to migrate for {name}")
+                    sql = f"CREATE TABLE IF NOT EXISTS {name} (\n"
+                    contlist = deltacont.split("\n")
+                    tmpjoinlist = []
+
+                    for cont in contlist:
+                        tmpjoinlist.append(cont)
+
+                    sql += ",\n".join(tmpjoinlist)
+
+                    sql += "\n)"
+
+
+                    cursor.execute(sql)
+                    
+                    if not (BACKUP_LAYOUT_DIR / name).exists():
+                        (BACKUP_LAYOUT_DIR / name).mkdir(parents=True, exist_ok=True)
+
+                    shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"000{BACKUP_LAYOUTFILE}{name}.sql")
+                    console.log(f"{name} history not detected, made table {name}")
+
 
     case actions.show.name:
         match target:
