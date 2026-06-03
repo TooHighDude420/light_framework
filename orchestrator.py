@@ -1,26 +1,61 @@
+import os
 import sys
 import textwrap
+import shutil
+# import argparse
 
+import numpy as np
+
+from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
+from dotenv import load_dotenv
+from mysql.connector import connect
+from rich.console import Console
+from rich.table import Table
 
 BASE_DIR = Path(__file__).parent
 
+# IMPORTANT TODOS:
+# phase migrations
+# work out deps
+# reintergrate files for one file download framework
+# intergrate argparser
+# parser = argparse.ArgumentParser(prog="orchestrator")
+
+load_dotenv(BASE_DIR / ".env")
+
 MODEL_DIR = BASE_DIR / "App" / "Models"
 CONTROLLER_DIR = BASE_DIR / "App" / "Controller"
+BASECLASSES_DIR = BASE_DIR / "App" / "Baseclasses"
 COMPONENT_DIR = BASE_DIR / "App" / "View" / "Component"
 VIEW_DIR = BASE_DIR / "App" / "View"
 STATIC_DIR = BASE_DIR / "App" / "Statics"
+TEMPLATE_DIR = BASE_DIR / "Basefiles"
+OUTPUT_DIR = BASE_DIR / "Maker_Out"
+SQL_DIR = OUTPUT_DIR / "SQL"
+BACKUP_LAYOUT_DIR = SQL_DIR / "History"
+
+DATABASE_LAYOUTFILE = "DataBaseLayout"
+BACKUP_LAYOUTFILE = "__DataBaseLayout"
+
+DATABASE = os.getenv("DB_DATABASE")
+
+console = Console(color_system="truecolor")
 
 class actions(Enum):
     make = 0
     install = auto()
+    migration = auto()
+    drop = auto()
+    show = auto()
 
 class targets(Enum):
     model = 0
     view = auto()
     controller = auto()
     component = auto()
+    table = auto()
 
 match len(sys.argv):
     case 2:
@@ -36,6 +71,33 @@ match len(sys.argv):
         name = sys.argv[2]
 
 match do:
+    case actions.drop.name:
+        match target:
+            case targets.table.name:
+                databaseconn = connect(
+                    host="127.0.0.1",
+                    user=os.getenv("DB_USERNAME"),
+                    password=os.getenv("DB_PASSWORD"),
+                    database=DATABASE
+                )
+
+                databaseconn.autocommit = True
+
+                cursor = databaseconn.cursor()
+
+                sql = f"DROP TABLE {DATABASE}.{name}"
+                
+                conf = input(f'are you shure this will delete {DATABASE}.{name} y/n:\n')
+
+                match conf:
+                    case 'y':
+                        cursor.execute(sql)
+                        os.remove(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql")
+                        # shutil.rmtree(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql")
+                        console.log(f"removed {DATABASE}.{name}")
+                    case 'n':
+                        sys.exit()
+
     case actions.make.name:
         match target:
             case targets.model.name:
@@ -44,21 +106,15 @@ match do:
 
                 filename = f"{MODEL_DIR / name}.php"
 
-                content = textwrap.dedent(f"""\
-                    <?php
-                    namespace App\\Models;
+                content = textwrap.dedent(rf"""<?php   
+namespace App\Models;
+use App\Baseclasses\Models;
 
-                    class {name}
-                    {{
-                        //paramaters go here
-                        public string $example;
+class {name} extends Models
+{{
 
-                        public function __construct(string $example)
-                        {{
-                            //construction goes here
-                            $this->example = $example;
-                        }}
-                    }}""")
+}}
+""")
                 
                 with open(filename, mode="x") as handle:
                     handle.write(content)
@@ -121,6 +177,39 @@ match do:
 
                 print(f'component {name} ready to use')
 
+            case targets.table.name:
+                databaseconn = connect(
+                    host="127.0.0.1",
+                    user=os.getenv("DB_USERNAME"),
+                    password=os.getenv("DB_PASSWORD"),
+                    database=DATABASE
+                )
+
+                databaseconn.autocommit = True
+
+                cursor = databaseconn.cursor()
+                
+                sql = textwrap.dedent(f"""\
+                    CREATE TABLE IF NOT EXISTS {DATABASE}.{name}(
+                        {name}ID INT PRIMARY KEY auto_increment NOT NULL          
+                    );
+                """)
+
+                cursor.execute(sql)
+
+                if not SQL_DIR.exists():
+                    SQL_DIR.mkdir(parents=True, exist_ok=True)
+
+                if not (BACKUP_LAYOUT_DIR / name).exists():
+                    (BACKUP_LAYOUT_DIR / name).mkdir(parents=True, exist_ok=True)
+
+                with open(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", mode='w') as handle:
+                    handle.write(f"{name}ID INT PRIMARY KEY auto_increment NOT NULL")
+
+                shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"000{BACKUP_LAYOUTFILE}{name}.sql")
+
+                console.log(f"made table {name}")
+
     case actions.install.name:
         if not MODEL_DIR.exists():
             MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -137,94 +226,14 @@ match do:
         if not STATIC_DIR.exists():
             STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
+        if not BASECLASSES_DIR.exists():
+            BASECLASSES_DIR.mkdir(exist_ok=True, parents=True)
+
+
         # build generic databasecontroller
         filename = CONTROLLER_DIR / "databaseController.php"
 
-        databasecontent = textwrap.dedent(f"""\
-            <?php
-                namespace App\\Controller;
-                use App\\Models\\User;
-                use App\\Statics\\DatabaseSingleton;
-
-                use PDO, PDOException;
-                use UnexpectedValueException;
-                use ValueError;
-
-                enum DatabaseActions{{
-                    case SELECT;
-                    case INSERT;
-                    case UPDATE;
-                    case DELETE;
-                }}
-
-
-                class DatabaseController
-                {{
-                    private $Conn;
-
-                    public function __construct()
-                    {{
-                        DatabaseSingleton::$conn ?: DatabaseSingleton::makeCon();
-                        $this->Conn = DatabaseSingleton::$conn;
-                    }}
-
-                    public function getFromTable(string $table, bool $all, bool $where, ?string $condition = null, ?array $columns = null): array
-                    {{
-                        if ($all) {{
-                            $sql = "SELECT * FROM $table";
-                        }} else {{
-                            $sql = "SELECT";
-
-                            if (count($columns) > 1) {{
-                                foreach ($columns as $column) {{
-                                    $sql .= " $column,";
-                                    print ($sql);
-                                }}
-                            }} else {{
-                                $sql .= " $columns[0]";
-                            }}
-
-                            $sql .= " FROM $table";
-                        }}
-
-                        if ($where) {{
-                            $sql .= " WHERE $condition";
-                        }}
-
-                        $stmt = $this->Conn->prepare($sql);
-                        $stmt->execute();
-
-                        return $stmt->fetchAll();
-                    }}
-
-                    public function test(DatabaseActions $action, string $table, ?array $columns = null, ?array $values): null | array{{
-                        switch ($action) {{
-                            case DatabaseActions::INSERT:
-                                if ($columns){{
-                                    $sql = "INSERT ";
-
-                                    foreach ($columns as $col){{
-                                        $sql .= $col;
-                                        $sql .= ", ";
-                                    }}
-                                }}
-
-                                return null;
-
-                            case DatabaseActions::SELECT:
-                                return [];
-                            
-                            case DatabaseActions::UPDATE:
-                                return null;
-
-                            case DatabaseActions::DELETE:
-                                return null;
-
-                            default:
-                                throw new ValueError("wtf bro");
-                        }}
-                    }}
-                }}""")
+        databasecontent = open(TEMPLATE_DIR / "database_controller_template.php", mode='r').read()
         
         with open(filename, mode='x') as handle:
             handle.write(databasecontent)
@@ -232,57 +241,7 @@ match do:
         # build generalController
         filename = STATIC_DIR / "route.php"
 
-        generalContent = textwrap.dedent(r"""<?php
-namespace App\Statics;
-use ValueError;
-
-class Route
-{
-    private static $routes = [];
-
-    public static function linkToAction(string $action)
-    {
-        return "php/$action.php";
-    }
-
-    public static function linkTo(string $location)
-    {
-        return "/$location";
-    }
-
-    public static function register_route(string $routename, string $viewname){
-        if(isset(Route::$routes[$routename])){
-            throw new ValueError("$routename already exists");
-        } else {
-            Route::$routes[$routename] = $viewname;
-        }
-    }
-
-    public static function register_routes(array $routes){
-        foreach ($routes as $key => $val){
-            Route::register_route($key, $val);
-        }
-    }
-
-    public static function get_uri(){
-        if (isset(Route::$routes[$_SERVER['REQUEST_URI']])){
-            $selector = Route::$routes[$_SERVER['REQUEST_URI']];
-            return $selector;
-        } else {
-            throw new ValueError("Route not registerd or not found");
-        }
-    }
-
-    public static function render(string $url): mixed {
-        return include "App/View/$url.inc.php";
-    }
-
-    public static function render_component(string $name, $data){            
-        extract($data);
-
-        return include "App/View/Component/$name.comp.php";
-    }
-}""")
+        generalContent = open(TEMPLATE_DIR / "route_template.php", mode='r').read()
 
         with open(filename, mode='x') as handle:
             handle.write(generalContent)
@@ -291,37 +250,7 @@ class Route
 
         filename = STATIC_DIR / "databaseSingleton.php"
 
-        singletonContent = textwrap.dedent(f"""\
-            <?php
-                namespace App\\Statics;
-                use PDO, PDOException;
-
-                class DatabaseSingleton
-                {{
-                    public static ?PDO $conn = null;
-
-                    public static function makeCon() :void
-                    {{
-                        if (DatabaseSingleton::$conn == false) {{
-                            $servername = "db";
-                            $username = "root";
-                            $password = getenv('DB_ROOT_PASSWORD');
-                            $dbname = getenv('DB_DATABASE');
-
-                            try {{
-                                DatabaseSingleton::$conn = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-                                DatabaseSingleton::$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                            }} catch (PDOException $e) {{
-                                echo "Connection failed: " . $e->getMessage();
-                            }}
-                        }}
-                    }}
-
-                    public static function closeCon(){{
-                        DatabaseSingleton::$conn = null;
-                    }}
-                }}
-        """)
+        singletonContent = open(TEMPLATE_DIR / "database_singleton_template.php", mode='r').read()
 
         with open(filename, mode='x') as handle:
             handle.write(singletonContent)
@@ -330,49 +259,191 @@ class Route
 
         filename = BASE_DIR / "AutoLoad.php"
 
-        autocontent = textwrap.dedent(f"""\
-            <?php
-                spl_autoload_register(function ($class) {{
-                    $baseDir = __DIR__ . '/';
-
-                    $file = $baseDir . str_replace('\\\\', '/', $class) . '.php';
-
-                    if (file_exists($file)) {{
-                        require $file;
-                    }} else {{
-                        echo "Class file not found: $file\\n";
-                    }}
-                }});""")
+        autocontent = open(TEMPLATE_DIR / "autoload_template.php", mode='r').read()
         
         with open(filename, mode='x') as handle:
             handle.write(autocontent)
 
         #example index
-
         filename = BASE_DIR / "index.php"
 
-        indexcont = textwrap.dedent(f"""\
-            <?php
-                require_once("AutoLoad.php");
-
-                use App\\Controller\\DatabaseController;
-                use App\\Statics\\Route;
-
-                session_start();
-                isset($_GET['page']) ? $page = $_GET['page'] : $page = "home";
-
-                $DatabaseController = new DatabaseController();
-                                    
-                Route::register_routes([
-                    "/" => "home",
-                    "/projects" => "projects",
-                    "/about", "about"
-                ]);
-
-                $request = Route::get_uri();
-                                """)
+        indexcont = open(TEMPLATE_DIR / "template_index.php", mode='r').read()
         
         with open(filename, mode='x') as handle:
             handle.write(indexcont)
 
+        # make model baseclass
+        filename = BASECLASSES_DIR / "Models.php"
+
+        modlescont = open(TEMPLATE_DIR / "models_template.php", mode='r').read()
+
+        with open(filename, mode='x') as handle:
+            handle.write(modlescont)
+
         print("install complete")
+        
+    case actions.migration.name:
+        databaseconn = connect(
+            host="127.0.0.1",
+            user=os.getenv("DB_USERNAME"),
+            password=os.getenv("DB_PASSWORD"),
+            database=DATABASE
+        )
+
+        databaseconn.autocommit = True
+
+        cursor = databaseconn.cursor()
+
+        for database_file in SQL_DIR.iterdir():
+            if database_file.is_file():
+                name = database_file.stem.replace(DATABASE_LAYOUTFILE, "")
+
+                with open(database_file, mode='r') as input:
+                    deltacont = input.read()
+
+                if (BACKUP_LAYOUT_DIR / name).exists():
+                    latest = max((BACKUP_LAYOUT_DIR / name).iterdir(), key=lambda p: p.name)
+
+                    with open(latest, mode='r') as current:
+                        latestcont = current.read()
+
+                    latestcont = latestcont.strip()
+                    latestcont = latestcont.split('\n') 
+
+                    deltacont = deltacont.strip()
+                    deltacont = deltacont.split('\n')
+
+                    for cont in deltacont:
+                        i = deltacont.index(cont)
+                        deltacont[i] = cont.strip()
+
+                    for lat in latestcont:
+                        i = latestcont.index(lat)
+                        latestcont[i] = lat.strip()
+
+                    latestarray = np.array(latestcont)
+                    deltarray = np.array(deltacont)
+
+                    if not np.array_equal(latestarray, deltarray):
+                        missing_in_delta = np.setdiff1d(latestarray, deltarray)
+                        extra_in_delta   = np.setdiff1d(deltarray, latestarray)
+                        
+                        update_his = False
+
+                        if len(extra_in_delta) > 0:
+                            update_his = True
+
+                            for extra in extra_in_delta:
+                                sql = f"ALTER TABLE {DATABASE}.{name} ADD "
+                                stmt = sql + extra
+                                cursor.execute(stmt)
+
+                                field = str(extra).split(' ')[0]
+                                console.log(f"added {field} to {DATABASE}.{name}")
+                        
+                        if len(missing_in_delta) > 0:
+                            update_his = True
+
+                            for missing in missing_in_delta:
+                                sql = f"ALTER TABLE {DATABASE}.{name} DROP COLUMN "
+                                field = str(missing).split(' ')[0]
+                                stmt = sql + field
+                                cursor.execute(stmt)
+                                console.log(f"removed {field} from {DATABASE}.{name}")
+
+                        if update_his:
+                            num = latest.stem.split('__')[0]
+                            num = int(num)
+                            num += 1
+                            num = f"{num:03d}"
+
+                            shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"{num}{BACKUP_LAYOUTFILE}{name}.sql")
+
+                    else:
+                        console.log(f"nothing to migrate for {name}")
+
+                else:
+                    sql = f"CREATE TABLE IF NOT EXISTS {name} (\n"
+                    contlist = deltacont.split("\n")
+                    tmpjoinlist = []
+
+                    for cont in contlist:
+                        tmpjoinlist.append(cont)
+
+                    sql += ",\n".join(tmpjoinlist)
+
+                    sql += "\n)"
+
+
+                    cursor.execute(sql)
+                    
+                    if not (BACKUP_LAYOUT_DIR / name).exists():
+                        (BACKUP_LAYOUT_DIR / name).mkdir(parents=True, exist_ok=True)
+
+                    shutil.copy(SQL_DIR / f"{DATABASE_LAYOUTFILE}{name}.sql", BACKUP_LAYOUT_DIR / name / f"000{BACKUP_LAYOUTFILE}{name}.sql")
+                    console.log(f"{name} history not detected, made table {name}")
+
+
+    case actions.show.name:
+        match target:
+            case targets.table.name:
+                match name:
+                    case 'all':
+                        databaseconn = connect(
+                            host="127.0.0.1",
+                            user=os.getenv("DB_USERNAME"),
+                            password=os.getenv("DB_PASSWORD"),
+                            database=DATABASE
+                        )
+
+                        databaseconn.autocommit = True
+
+                        cursor = databaseconn.cursor()
+
+                        sql = f"SHOW TABLES"
+
+                        cursor.execute(sql)
+
+                        res = cursor.fetchall()
+
+                        table = Table("database name", title=f"{DATABASE}.{name}")
+
+                        for tables in res:
+                            table.add_row(tables[0])
+
+                        console.print(table)
+                    
+                    case _:
+                        databaseconn = connect(
+                            host="127.0.0.1",
+                            user=os.getenv("DB_USERNAME"),
+                            password=os.getenv("DB_PASSWORD"),
+                            database=DATABASE
+                        )
+
+                        databaseconn.autocommit = True
+
+                        cursor = databaseconn.cursor()
+
+                        sql = f"DESCRIBE {DATABASE}.{name}"
+
+                        cursor.execute(sql)
+
+                        res = cursor.fetchall()
+                        
+                        columns = []
+
+                        for column in res:
+                            columns.append(column[0])
+
+                        table = Table(*columns, title=f"{DATABASE}.{name}")
+
+                        sql = f"SELECT * FROM {DATABASE}.{name}"
+                        cursor.execute(sql)
+
+                        res = cursor.fetchall()
+
+                        for row in res:
+                            table.add_row(*row)
+
+                        console.print(table)
