@@ -21,6 +21,7 @@ BASE_DIR = Path(__file__).parent
 # work out deps
 # reintergrate files for one file download framework
 # intergrate argparser
+# extend readme
 # parser = argparse.ArgumentParser(prog="orchestrator")
 
 load_dotenv(BASE_DIR / ".env")
@@ -251,47 +252,80 @@ def install():
     print("install complete")
 
 # migrations functions
+def sql_parsing(database_file):
+    phase_one:list[str] = []
+    phase_two:list[str] = []
+    phase = ""
+
+    with open(database_file, "r", encoding="utf-8") as f:
+        for line_number, line in enumerate(f, start=1):
+            stripped = line.strip()
+
+            # Empty line
+            if not stripped:
+                continue
+
+            # Single-line SQL comment
+            if stripped.startswith("--"):
+                if "one" in stripped:
+                    phase = "one"
+                elif "two" in stripped:
+                    phase = "two"
+                
+                continue
+
+            match phase:
+                case "one":
+                    if "\n" in line:
+                        line = line.replace("\n", "")
+
+                    phase_one.append(line)
+
+                case "two":
+                    if "\n" in line:
+                        line = line.replace("\n", "")
+                    
+                    phase_two.append(line)
+
+                case _:
+                    raise ValueError(f"this should not happen, input: phase:{phase}, line:{line}, file:{database_file} line:286")
+            
+    return (phase_one, phase_two)
+        
 def migration(cursor):
     for database_file in SQL_DIR.iterdir():
         if database_file.is_file():
+            phase_one, phase_two = sql_parsing(database_file)
             name = database_file.stem.replace(DATABASE_LAYOUTFILE, "")
 
-            with open(database_file, mode='r') as input:
-                deltacont = input.read()
-
+            deltarray = (np.array(phase_one), np.array(phase_two))
+            
             if (BACKUP_LAYOUT_DIR / name).exists():
                 latest = max((BACKUP_LAYOUT_DIR / name).iterdir(), key=lambda p: p.name)
 
-                with open(latest, mode='r') as current:
-                    latestcont = current.read()
+                latest_one, latest_two = sql_parsing(latest)
 
-                latestcont = latestcont.strip()
-                latestcont = latestcont.split('\n') 
+                latestarray = (np.array(latest_one), np.array(latest_two))
+                
+                same = (
+                    np.array_equal(latestarray[0], deltarray[0])
+                    and
+                    np.array_equal(latestarray[1], deltarray[1])
+                )
 
-                deltacont = deltacont.strip()
-                deltacont = deltacont.split('\n')
-
-                for cont in deltacont:
-                    i = deltacont.index(cont)
-                    deltacont[i] = cont.strip()
-
-                for lat in latestcont:
-                    i = latestcont.index(lat)
-                    latestcont[i] = lat.strip()
-
-                latestarray = np.array(latestcont)
-                deltarray = np.array(deltacont)
-
-                if not np.array_equal(latestarray, deltarray):
-                    missing_in_delta = np.setdiff1d(latestarray, deltarray)
-                    extra_in_delta   = np.setdiff1d(deltarray, latestarray)
+                if not same:
+                    missing_in_phase_one = np.setdiff1d(latestarray[0], deltarray[0])
+                    missing_in_phase_two = np.setdiff1d(latestarray[1], deltarray[1])
                     
+                    extra_in_phase_one = np.setdiff1d(deltarray[0], latestarray[0])                   
+                    extra_in_phase_two = np.setdiff1d(deltarray[1], latestarray[1])                   
+                
                     update_his = False
 
-                    if len(extra_in_delta) > 0:
+                    if len(extra_in_phase_one) > 0:
                         update_his = True
 
-                        for extra in extra_in_delta:
+                        for extra in extra_in_phase_one:
                             sql = f"ALTER TABLE {DATABASE}.{name} ADD "
                             stmt = sql + extra
                             cursor.execute(stmt)
@@ -299,10 +333,21 @@ def migration(cursor):
                             field = str(extra).split(' ')[0]
                             console.log(f"added {field} to {DATABASE}.{name}")
                     
-                    if len(missing_in_delta) > 0:
+                    if len(extra_in_phase_two)  > 0:
                         update_his = True
 
-                        for missing in missing_in_delta:
+                        for extra in extra_in_phase_two:
+                            sql = f"ALTER TABLE {DATABASE}.{name} "
+                            stmt = sql + extra
+                            cursor.execute(stmt)
+
+                            con_name = str(extra).split(' ')[2]
+                            console.log(f"added {con_name} to {DATABASE}.{name}")
+                    
+                    if len(missing_in_phase_one) > 0:
+                        update_his = True
+
+                        for missing in missing_in_phase_one:
                             sql = f"ALTER TABLE {DATABASE}.{name} DROP COLUMN "
                             field = str(missing).split(' ')[0]
                             stmt = sql + field
@@ -322,18 +367,16 @@ def migration(cursor):
 
             else:
                 sql = f"CREATE TABLE IF NOT EXISTS {name} (\n"
-                contlist = deltacont.split("\n")
-                tmpjoinlist = []
-
-                for cont in contlist:
-                    tmpjoinlist.append(cont)
-
-                sql += ",\n".join(tmpjoinlist)
-
-                sql += "\n)"
-
+                sql += ",\n".join(phase_one)
+                sql += "\n);\n"
 
                 cursor.execute(sql)
+
+                if len(phase_two) > 0:
+                    for cons in phase_two:
+                        sql = f"ALTER TABLE {DATABASE}.{name} "
+                        stmt = sql + cons
+                        cursor.execute(stmt)
                 
                 if not (BACKUP_LAYOUT_DIR / name).exists():
                     (BACKUP_LAYOUT_DIR / name).mkdir(parents=True, exist_ok=True)
