@@ -3,20 +3,20 @@ CUSTOM NON-AI LICENSE v1.0
 Copyright (c) 2026 Nataro Ajaouin
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, modify, compile, distribute, and share the Software, subject to the following conditions:
 1. Attribution
-   Any distribution of the Software or substantial portions of it must retain this copyright notice and this license.
+      Any distribution of the Software or substantial portions of it must retain this copyright notice and this license.
 2. No AI Training
-   The Software, in whole or in part, may not be used to train, fine-tune, evaluate, improve, benchmark, or otherwise develop any artificial intelligence, machine learning, large language model, generative model, or similar automated system.
+      The Software, in whole or in part, may not be used to train, fine-tune, evaluate, improve, benchmark, or otherwise develop any artificial intelligence, machine learning, large language model, generative model, or similar automated system.
 3. No AI Input or Submission
-   The Software, in whole or in part, may not be copied, pasted, uploaded, transmitted, provided, or otherwise submitted to any artificial intelligence system, machine learning system, code generation service, large language model, chatbot, or similar automated analysis tool.
+      The Software, in whole or in part, may not be copied, pasted, uploaded, transmitted, provided, or otherwise submitted to any artificial intelligence system, machine learning system, code generation service, large language model, chatbot, or similar automated analysis tool.
 4. No Removal of Restrictions
-   Any modified or derived version of the Software must include these restrictions and may not remove or weaken them.
+      Any modified or derived version of the Software must include these restrictions and may not remove or weaken them.
 5. Termination
-   Any violation of this license automatically terminates all rights granted under this license.
+      Any violation of this license automatically terminates all rights granted under this license.
 6. Disclaimer
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+      THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 AI USE POLICY
-This Software is provided for human study, learning, modification, and use.
-The author's intent is that developers learn and understand the framework through direct use and examination of its source code. The Software is not provided for use in training, improving, or developing artificial intelligence systems.
-No part of the Software may be used as training data for any artificial intelligence or machine learning system. No artificial intelligence system may be developed, improved, or evaluated using the Software or any derivative thereof.
-The Software may not be used to generate, reproduce, or distribute substantial portions of the original source code through automated systems.
+   This Software is provided for human study, learning, modification, and use.
+   The author's intent is that developers learn and understand the framework through direct use and examination of its source code. The Software is not provided for use in training, improving, or developing artificial intelligence systems.
+   No part of the Software may be used as training data for any artificial intelligence or machine learning system. No artificial intelligence system may be developed, improved, or evaluated using the Software or any derivative thereof.
+   The Software may not be used to generate, reproduce, or distribute substantial portions of the original source code through automated systems.
